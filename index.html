@@ -79,17 +79,19 @@
   const html5QrCode = new Html5QrcodeScanner(
     "reader", 
     { 
-      fps: 10, 
-      qrbox: (viewfinderWidth, viewfinderHeight) => {
-        // Keeps scan box proportional across different screen sizes
-        const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-        return {
-          width: Math.floor(minEdge * 0.7),
-          height: Math.floor(minEdge * 0.7)
-        };
-      },
+      fps: 25,
+      qrbox: { width: 230, height: 230 },
+      aspectRatio: 1.0,
+      showTorchButtonIfSupported: true,
       videoConstraints: {
-        facingMode: "user" // Use "user" for front selfie cam or "environment" for back cam
+        // "environment" ang nagtatakda sa likod na camera bilang default
+        facingMode: { exact: "environment" },
+        focusMode: "continuous",
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      },
+      experimentalFeatures: {
+        useBarCodeDetectorIfSupported: true
       }
     }, 
     false
