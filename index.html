@@ -23,7 +23,7 @@
 </div>
 
 <script>
-  // ILAGAY DITO ANG IYONG BAGONG APPS SCRIPT WEB APP URL:
+  //APPS SCRIPT WEB APP URL:
   const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzozU4_7KAfJiN9GXtTujcB3liHedBVSm2zBCN4-EdcpWuZlCtzrlcy14bYQHeJ0pqW7w/exec";
 
   let isScanning = true;
@@ -36,7 +36,6 @@
     statusDiv.className = "";
     statusDiv.innerText = `Checking ID: ${decodedText}...`;
 
-    // Gamit ang text/plain at redirect: follow para makuha ang JSON response
     fetch(SCRIPT_URL, {
       method: "POST",
       redirect: "follow",
@@ -76,9 +75,23 @@
     });
   }
 
+  // Configured for responsive mobile & tablet displays
   const html5QrCode = new Html5QrcodeScanner(
     "reader", 
-    { fps: 10, qrbox: { width: 250, height: 250 } }, 
+    { 
+      fps: 10, 
+      qrbox: (viewfinderWidth, viewfinderHeight) => {
+        // Keeps scan box proportional across different screen sizes
+        const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+        return {
+          width: Math.floor(minEdge * 0.7),
+          height: Math.floor(minEdge * 0.7)
+        };
+      },
+      videoConstraints: {
+        facingMode: "user" // Use "user" for front selfie cam or "environment" for back cam
+      }
+    }, 
     false
   );
   html5QrCode.render(onScanSuccess);
