@@ -4,24 +4,89 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>QR Attendance System</title>
+  <!-- Html5-QRCode Library -->
   <script src="https://unpkg.com/html5-qrcode"></script>
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; text-align: center; background: #f0f2f5; margin: 0; padding: 20px; }
-    .card { max-width: 480px; margin: 0 auto; background: white; padding: 24px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-    #reader { width: 100%; border-radius: 8px; overflow: hidden; margin: 15px auto; }
-    #status { margin-top: 15px; font-weight: 600; padding: 12px; border-radius: 6px; background: #e9ecef; color: #495057; transition: all 0.3s ease; }
-    .success { background: #d4edda !important; color: #155724 !important; border: 1px solid #c3e6cb; }
-    .info { background: #cce5ff !important; color: #004085 !important; border: 1px solid #b8daff; }
-    .error { background: #f8d7da !important; color: #721c24 !important; border: 1px solid #f5c6cb; }
-    .subtext { font-size: 0.85em; font-weight: normal; margin-top: 4px; }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      text-align: center;
+      background: #f0f2f5;
+      margin: 0;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+    .card {
+      width: 100%;
+      max-width: 480px;
+      background: #ffffff;
+      padding: 20px;
+      border-radius: 14px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+    }
+    h2 {
+      margin: 0 0 4px 0;
+      color: #1e293b;
+      font-size: 1.4rem;
+    }
+    .subtitle {
+      font-size: 0.85rem;
+      color: #64748b;
+      margin-bottom: 16px;
+    }
+    #reader {
+      width: 100%;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #000;
+      margin: 0 auto;
+    }
+    #status {
+      margin-top: 16px;
+      font-weight: 600;
+      padding: 14px;
+      border-radius: 8px;
+      background: #e2e8f0;
+      color: #334155;
+      font-size: 0.95rem;
+      transition: all 0.2s ease-in-out;
+      line-height: 1.4;
+    }
+    .success {
+      background: #dcfce7 !important;
+      color: #166534 !important;
+      border: 1px solid #bbf7d0;
+    }
+    .info {
+      background: #e0f2fe !important;
+      color: #0369a1 !important;
+      border: 1px solid #bae6fd;
+    }
+    .error {
+      background: #fee2e2 !important;
+      color: #991b1b !important;
+      border: 1px solid #fecaca;
+    }
+    .subtext {
+      font-size: 0.8rem;
+      font-weight: 500;
+      margin-top: 4px;
+      opacity: 0.9;
+    }
   </style>
 </head>
 <body>
 
 <div class="card">
   <h2>QR Attendance Scanner</h2>
+  <div class="subtitle">Iharap ang QR code sa camera para mag-log</div>
   <div id="reader"></div>
-  <div id="status">Ready to scan QR Code...</div>
+  <div id="status">Initializing camera...</div>
 </div>
 
 <script>
@@ -29,6 +94,27 @@
   const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzUZUxSxBJedETA102JkNr40wrWeXpGEriuEif-T2LllbDtG3y6uyS8Cayd-jQcOB-5kA/exec";
 
   let isScanning = true;
+
+  // Beep Audio gamit ang Web Audio API (gumagana kahit offline at walang external link)
+  function playBeep(success = true) {
+    try {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+
+      osc.type = "sine";
+      osc.frequency.value = success ? 880 : 320;
+      gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.15);
+    } catch (e) {
+      console.log("Audio not supported or blocked by browser.");
+    }
+  }
 
   function onScanSuccess(decodedText) {
     if (!isScanning) return;
@@ -42,26 +128,26 @@
       method: "POST",
       redirect: "follow",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ studentId: decodedText })
+      body: JSON.stringify({ studentId: decodedText.trim() })
     })
     .then(res => res.json())
     .then(data => {
       if (data.status === "success") {
-        let successAudio = new Audio("https://media.geeksforgeeks.org/wp-content/uploads/20190529122812/beep.mp3");
-        successAudio.play().catch(() => {});
-
+        playBeep(true);
         statusDiv.className = "success";
         statusDiv.innerHTML = `✓ <strong>${data.action}</strong>: ${data.name}<br>
           <div class="subtext">Grade ${data.grade} - ${data.section} | ${data.time}</div>`;
       } else if (data.status === "complete") {
+        playBeep(false);
         statusDiv.className = "info";
         statusDiv.innerHTML = `ℹ️ ${data.name}<br><div class="subtext">${data.message}</div>`;
       } else {
+        playBeep(false);
         statusDiv.className = "error";
         statusDiv.innerText = `❌ ${data.message}`;
       }
 
-      // 4 seconds cooldown bago tanggapin ang susunod na scan
+      // 4-second cooldown bago payagan ang susunod na scan
       setTimeout(() => {
         statusDiv.className = "";
         statusDiv.innerText = "Ready to scan QR Code...";
@@ -69,8 +155,10 @@
       }, 4000);
     })
     .catch(err => {
+      console.error("Fetch Error:", err);
+      playBeep(false);
       statusDiv.className = "error";
-      statusDiv.innerText = "❌ Network error o hindi makakonekta.";
+      statusDiv.innerText = "❌ Network connection error!";
       setTimeout(() => {
         statusDiv.className = "";
         statusDiv.innerText = "Ready to scan QR Code...";
@@ -79,12 +167,42 @@
     });
   }
 
-  const html5QrCode = new Html5QrcodeScanner(
-    "reader", 
-    { fps: 10, qrbox: { width: 250, height: 250 } }, 
-    false
-  );
-  html5QrCode.render(onScanSuccess);
+  // Camera setup gamit ang native environment-facing preference
+  const html5QrCode = new Html5Qrcode("reader");
+
+  html5QrCode.start(
+    { facingMode: "environment" },
+    {
+      fps: 15,
+      qrbox: { width: 250, height: 250 },
+      aspectRatio: 1.0
+    },
+    onScanSuccess,
+    (errorMessage) => {
+      // Tahimik na patuloy na nag-e-evaluate ng frames
+    }
+  ).then(() => {
+    document.getElementById("status").innerText = "Ready to scan QR Code...";
+  }).catch(err => {
+    console.error("Camera Init Error:", err);
+    // Fallback: subukan kunin ang unang camera kung nag-fail ang environment query
+    Html5Qrcode.getCameras().then(devices => {
+      if (devices && devices.length) {
+        html5QrCode.start(
+          devices[0].id,
+          { fps: 15, qrbox: { width: 250, height: 250 } },
+          onScanSuccess,
+          () => {}
+        ).then(() => {
+          document.getElementById("status").innerText = "Ready to scan QR Code...";
+        });
+      } else {
+        document.getElementById("status").innerText = "Walang nahanap na camera sa device.";
+      }
+    }).catch(e => {
+      document.getElementById("status").innerText = "Camera access denied o hindi naka-allow ang permissions.";
+    });
+  });
 </script>
 
 </body>
