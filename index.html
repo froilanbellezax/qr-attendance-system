@@ -11,7 +11,9 @@
     #reader { width: 100%; border-radius: 8px; overflow: hidden; margin: 15px auto; }
     #status { margin-top: 15px; font-weight: 600; padding: 12px; border-radius: 6px; background: #e9ecef; color: #495057; transition: all 0.3s ease; }
     .success { background: #d4edda !important; color: #155724 !important; border: 1px solid #c3e6cb; }
+    .info { background: #cce5ff !important; color: #004085 !important; border: 1px solid #b8daff; }
     .error { background: #f8d7da !important; color: #721c24 !important; border: 1px solid #f5c6cb; }
+    .subtext { font-size: 0.85em; font-weight: normal; margin-top: 4px; }
   </style>
 </head>
 <body>
@@ -23,8 +25,8 @@
 </div>
 
 <script>
-  //APPS SCRIPT WEB APP URL:
-  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzozU4_7KAfJiN9GXtTujcB3liHedBVSm2zBCN4-EdcpWuZlCtzrlcy14bYQHeJ0pqW7w/exec";
+  // IYONG DEPLOYED WEB APP URL:
+  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzUZUxSxBJedETA102JkNr40wrWeXpGEriuEif-T2LllbDtG3y6uyS8Cayd-jQcOB-5kA/exec";
 
   let isScanning = true;
 
@@ -45,55 +47,41 @@
     .then(res => res.json())
     .then(data => {
       if (data.status === "success") {
-        // Tagumpay: Kilala ang ID
         let successAudio = new Audio("https://media.geeksforgeeks.org/wp-content/uploads/20190529122812/beep.mp3");
         successAudio.play().catch(() => {});
 
         statusDiv.className = "success";
-        statusDiv.innerText = `✓ Welcome, ${data.name}! (${data.id})`;
+        statusDiv.innerHTML = `✓ <strong>${data.action}</strong>: ${data.name}<br>
+          <div class="subtext">Grade ${data.grade} - ${data.section} | ${data.time}</div>`;
+      } else if (data.status === "complete") {
+        statusDiv.className = "info";
+        statusDiv.innerHTML = `ℹ️ ${data.name}<br><div class="subtext">${data.message}</div>`;
       } else {
-        // Error: Hindi nakarehistro ang ID sa 'Students' tab
         statusDiv.className = "error";
-        statusDiv.innerText = `❌ Error: ${data.message}`;
+        statusDiv.innerText = `❌ ${data.message}`;
       }
 
-      // 3.5 seconds cooldown bago mag-scan ulit
+      // 4 seconds cooldown bago tanggapin ang susunod na scan
       setTimeout(() => {
         statusDiv.className = "";
         statusDiv.innerText = "Ready to scan QR Code...";
         isScanning = true;
-      }, 3500);
+      }, 4000);
     })
     .catch(err => {
       statusDiv.className = "error";
-      statusDiv.innerText = "❌ Network connection error!";
+      statusDiv.innerText = "❌ Network error o hindi makakonekta.";
       setTimeout(() => {
         statusDiv.className = "";
         statusDiv.innerText = "Ready to scan QR Code...";
         isScanning = true;
-      }, 3500);
+      }, 4000);
     });
   }
 
-  // Configured for responsive mobile & tablet displays
   const html5QrCode = new Html5QrcodeScanner(
     "reader", 
-    { 
-      fps: 25,
-      qrbox: { width: 230, height: 230 },
-      aspectRatio: 1.0,
-      showTorchButtonIfSupported: true,
-      videoConstraints: {
-        // "environment" ang nagtatakda sa likod na camera bilang default
-        facingMode: { exact: "environment" },
-        focusMode: "continuous",
-        width: { ideal: 1280 },
-        height: { ideal: 720 }
-      },
-      experimentalFeatures: {
-        useBarCodeDetectorIfSupported: true
-      }
-    }, 
+    { fps: 10, qrbox: { width: 250, height: 250 } }, 
     false
   );
   html5QrCode.render(onScanSuccess);
