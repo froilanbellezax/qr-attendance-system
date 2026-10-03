@@ -4,9 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>QR Code Attendance Scanner</title>
-  <!-- Tailwind CSS CDN para sa modernong layout -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- HTML5 QR Code Scanner Library -->
   <script src="https://unpkg.com/html5-qrcode"></script>
 </head>
 <body class="bg-slate-100 min-h-screen flex flex-col items-center p-4">
@@ -15,10 +13,10 @@
     <h1 class="text-2xl font-bold text-slate-800 mb-1">QR Attendance System</h1>
     <p class="text-sm text-slate-500 mb-4">Cutoff: 7:30 AM | Cooldown: 10 mins</p>
 
-    <!-- Camera Scanner Viewport -->
+    <!-- Camera Viewport -->
     <div id="reader" class="w-full rounded-xl overflow-hidden border-2 border-dashed border-slate-300"></div>
 
-    <!-- Status Banner / Notification Display -->
+    <!-- Status Display -->
     <div id="status-card" class="w-full mt-5 p-4 rounded-xl text-center hidden">
       <h2 id="status-title" class="font-bold text-lg"></h2>
       <p id="status-msg" class="text-sm mt-1"></p>
@@ -26,7 +24,7 @@
   </div>
 
   <script>
-    // PALITAN ITO NG IYONG DEPLOYED APPS SCRIPT WEB APP URL:
+    // IYONG DEPLOYED WEB APP URL:
     const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzUZUxSxBJedETA102JkNr40wrWeXpGEriuEif-T2LllbDtG3y6uyS8Cayd-jQcOB-5kA/exec";
 
     let isProcessing = false;
@@ -54,7 +52,7 @@
 
     async function handleScanSuccess(decodedText) {
       const now = Date.now();
-      // Iwasan ang paulit-ulit na pagbasa ng parehong QR sa loob ng 5 segundo habang nakatutok
+      // Iwasan ang paulit-ulit na pagbasa ng parehong QR code sa loob ng 5 segundo
       if (decodedText === lastScannedCode && (now - lastScanTime) < 5000) {
         return;
       }
@@ -87,17 +85,21 @@
           showStatus("❌ Error", result.message, "error");
         }
       } catch (err) {
-        showStatus("Connection Error", "Hindi makakonekta sa Google Sheets. Pakisuri ang network.", "error");
+        showStatus("Connection Error", "Hindi makakonekta sa database. Pakisuri ang network.", "error");
       } finally {
         isProcessing = false;
       }
     }
 
-    // Simulan ang scanner
+    // Startup configuration ng camera
     const html5QrcodeScanner = new Html5QrcodeScanner(
       "reader", 
-      { fps: 10, qrbox: { width: 250, height: 250 } },
-      /* verbose= */ false
+      { 
+        fps: 10, 
+        qrbox: { width: 250, height: 250 },
+        facingMode: "environment" // Automatic gamit ng back camera sa cellphone
+      },
+      false
     );
     html5QrcodeScanner.render(handleScanSuccess);
   </script>
