@@ -1,91 +1,128 @@
-<script>
-  // IYONG DEPLOYED WEB APP URL:
-  const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzUZUxSxBJedETA102JkNr40wrWeXpGEriuEif-T2LllbDtG3y6uyS8Cayd-jQcOB-5kA/exec";
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QR Code Attendance Scanner</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- HTML5 QR Code Library -->
+  <script src="https://unpkg.com/html5-qrcode"></script>
+</head>
+<body class="bg-slate-100 min-h-screen flex flex-col items-center justify-center p-4">
 
-  let isProcessing = false;
-  let lastScannedCode = "";
-  let lastScanTime = 0;
+  <div class="max-w-md w-full bg-white rounded-2xl shadow-xl p-6 flex flex-col items-center border border-slate-200">
+    <h1 class="text-2xl font-bold text-slate-800 mb-1">QR Attendance System</h1>
+    <p class="text-xs font-medium text-slate-500 mb-4 uppercase tracking-wider">Cutoff: 7:30 AM | Cooldown: 10 mins</p>
 
-  function showStatus(title, message, type) {
-    const card = document.getElementById("status-card");
-    const titleElem = document.getElementById("status-title");
-    const msgElem = document.getElementById("status-msg");
+    <!-- Camera Viewport Container -->
+    <div id="reader" class="w-full bg-black rounded-xl overflow-hidden min-h-[300px] border border-slate-300"></div>
 
-    card.className = "w-full mt-5 p-4 rounded-xl text-center border ";
-    if (type === "success") {
-      card.classList.add("bg-emerald-50", "text-emerald-800", "border-emerald-300");
-    } else if (type === "warning") {
-      card.classList.add("bg-amber-50", "text-amber-800", "border-amber-300");
-    } else {
-      card.classList.add("bg-rose-50", "text-rose-800", "border-rose-300");
-    }
+    <!-- Status Alert Display -->
+    <div id="status-card" class="w-full mt-5 p-4 rounded-xl text-center hidden transition-all duration-200">
+      <h2 id="status-title" class="font-bold text-base"></h2>
+      <p id="status-msg" class="text-sm mt-1"></p>
+    </div>
+  </div>
 
-    titleElem.innerText = title;
-    msgElem.innerText = message;
-    card.classList.remove("hidden");
-  }
+  <script>
+    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzUZUxSxBJedETA102JkNr40wrWeXpGEriuEif-T2LllbDtG3y6uyS8Cayd-jQcOB-5kA/exec";
 
-  async function handleScanSuccess(decodedText) {
-    const now = Date.now();
-    // Iwasan ang paulit-ulit na pagbasa ng parehong QR code sa loob ng 5 segundo
-    if (decodedText === lastScannedCode && (now - lastScanTime) < 5000) {
-      return;
-    }
+    let isProcessing = false;
+    let lastScannedCode = "";
+    let lastScanTime = 0;
 
-    if (isProcessing) return;
-    isProcessing = true;
-    lastScannedCode = decodedText;
-    lastScanTime = now;
+    function showStatus(title, message, type) {
+      const card = document.getElementById("status-card");
+      const titleElem = document.getElementById("status-title");
+      const msgElem = document.getElementById("status-msg");
 
-    showStatus("Processing...", "Recording attendance for LRN: " + decodedText, "warning");
-
-    try {
-      const response = await fetch(WEB_APP_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({ lrn: decodedText.trim() })
-      });
-
-      const result = await response.json();
-
-      if (result.status === "success") {
-        showStatus(
-          result.action === "TIME_IN" ? "✅ TIME IN" : "🚪 TIME OUT",
-          result.message,
-          "success"
-        );
-      } else if (result.status === "warning") {
-        showStatus("⚠️ Paalala", result.message, "warning");
+      card.className = "w-full mt-5 p-4 rounded-xl text-center border font-sans";
+      if (type === "success") {
+        card.classList.add("bg-emerald-50", "text-emerald-800", "border-emerald-300");
+      } else if (type === "warning") {
+        card.classList.add("bg-amber-50", "text-amber-800", "border-amber-300");
       } else {
-        showStatus("❌ Error", result.message, "error");
+        card.classList.add("bg-rose-50", "text-rose-800", "border-rose-300");
       }
-    } catch (err) {
-      showStatus("Connection Error", "Hindi makakonekta sa database. Pakisuri ang network.", "error");
-    } finally {
-      isProcessing = false;
+
+      titleElem.innerText = title;
+      msgElem.innerText = message;
+      card.classList.remove("hidden");
     }
-  }
 
-  // Initialization: Awtomatikong pinipili ang BACK CAMERA ("environment")
-  const html5QrCode = new Html5Qrcode("reader");
-  const config = { 
-    fps: 10, 
-    qrbox: { width: 250, height: 250 } 
-  };
+    async function handleScanSuccess(decodedText) {
+      const now = Date.now();
+      // Ignore repeat scans of the same QR code within 5 seconds
+      if (decodedText === lastScannedCode && (now - lastScanTime) < 5000) {
+        return;
+      }
 
-  html5QrCode.start(
-    { facingMode: { exact: "environment" } }, // Sapilitang back camera
-    config,
-    handleScanSuccess
-  ).catch(err => {
-    // Fallback: Kung sakaling walang dual camera (hal. laptop o webcam), buksan ang default camera
-    console.warn("Exact environment camera failed, falling back to default:", err);
-    html5QrCode.start(
-      { facingMode: "environment" },
-      config,
-      handleScanSuccess
-    ).catch(e => {
-      showStatus("Camera Error", "Hindi ma-access ang camera. Siguraduhing binigyan ng permission ang browser.", "error");
+      if (isProcessing) return;
+      isProcessing = true;
+      lastScannedCode = decodedText;
+      lastScanTime = now;
+
+      showStatus("Processing...", "Recording attendance for LRN: " + decodedText, "warning");
+
+      try {
+        const response = await fetch(WEB_APP_URL, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify({ lrn: decodedText.trim() })
+        });
+
+        const result = await response.json();
+
+        if (result.status === "success") {
+          showStatus(
+            result.action === "TIME_IN" ? "✅ TIME IN" : "🚪 TIME OUT",
+            result.message,
+            "success"
+          );
+        } else if (result.status === "warning") {
+          showStatus("⚠️ Notice", result.message, "warning");
+        } else {
+          showStatus("❌ Error", result.message, "error");
+        }
+      } catch (err) {
+        showStatus("Connection Error", "Unable to communicate with the database. Check your internet connection.", "error");
+      } finally {
+        isProcessing = false;
+      }
+    }
+
+    const html5QrCode = new Html5Qrcode("reader");
+
+    // Initialize camera by detecting available video devices
+    Html5Qrcode.getCameras().then(devices => {
+      if (devices && devices.length) {
+        // Prioritize back/rear camera by checking device label
+        let selectedCamera = devices.find(device => 
+          device.label.toLowerCase().includes("back") || 
+          device.label.toLowerCase().includes("rear") ||
+          device.label.toLowerCase().includes("environment")
+        );
+
+        // Fallback to the last camera in the list (typically the back camera on Android/iOS)
+        let cameraId = selectedCamera ? selectedCamera.id : devices[devices.length - 1].id;
+
+        html5QrCode.start(
+          cameraId,
+          {
+            fps: 10,
+            qrbox: { width: 250, height: 250 }
+          },
+          handleScanSuccess
+        ).catch(err => {
+          showStatus("Camera Start Error", "Failed to start camera feed: " + err, "error");
+        });
+      } else {
+        showStatus("No Camera Found", "No camera hardware detected on this device.", "error");
+      }
+    }).catch(err => {
+      showStatus("Permission Error", "Unable to query cameras. Please ensure camera access is allowed.", "error");
     });
-  });
-</script>
+  </script>
+</body>
+</html>
