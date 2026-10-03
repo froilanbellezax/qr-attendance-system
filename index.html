@@ -3,215 +3,103 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QR Attendance System</title>
-  <!-- Html5-QRCode Library -->
+  <title>QR Code Attendance Scanner</title>
+  <!-- Tailwind CSS CDN para sa modernong layout -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- HTML5 QR Code Scanner Library -->
   <script src="https://unpkg.com/html5-qrcode"></script>
-  <style>
-    * {
-      box-sizing: border-box;
-    }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      text-align: center;
-      background: #f0f2f5;
-      margin: 0;
-      padding: 16px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      min-height: 100vh;
-    }
-    .card {
-      width: 100%;
-      max-width: 480px;
-      background: #ffffff;
-      padding: 20px;
-      border-radius: 14px;
-      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
-    }
-    h2 {
-      margin: 0 0 4px 0;
-      color: #1e293b;
-      font-size: 1.4rem;
-    }
-    .subtitle {
-      font-size: 0.85rem;
-      color: #64748b;
-      margin-bottom: 16px;
-    }
-    #reader {
-      width: 100%;
-      border-radius: 10px;
-      overflow: hidden;
-      background: #000;
-      margin: 0 auto;
-    }
-    #status {
-      margin-top: 16px;
-      font-weight: 600;
-      padding: 14px;
-      border-radius: 8px;
-      background: #e2e8f0;
-      color: #334155;
-      font-size: 0.95rem;
-      transition: all 0.2s ease-in-out;
-      line-height: 1.4;
-    }
-    .success {
-      background: #dcfce7 !important;
-      color: #166534 !important;
-      border: 1px solid #bbf7d0;
-    }
-    .warning {
-      background: #fef3c7 !important;
-      color: #92400e !important;
-      border: 1px solid #fde68a;
-    }
-    .info {
-      background: #e0f2fe !important;
-      color: #0369a1 !important;
-      border: 1px solid #bae6fd;
-    }
-    .error {
-      background: #fee2e2 !important;
-      color: #991b1b !important;
-      border: 1px solid #fecaca;
-    }
-    .subtext {
-      font-size: 0.85rem;
-      font-weight: 500;
-      margin-top: 4px;
-      opacity: 0.95;
-    }
-  </style>
 </head>
-<body>
+<body class="bg-slate-100 min-h-screen flex flex-col items-center p-4">
 
-<div class="card">
-  <h2>QR Attendance Scanner</h2>
-  <div class="subtitle">Iharap ang QR code sa camera para mag-log</div>
-  <div id="reader"></div>
-  <div id="status">Initializing camera...</div>
-</div>
+  <div class="max-w-md w-full bg-white rounded-2xl shadow-lg p-6 flex flex-col items-center">
+    <h1 class="text-2xl font-bold text-slate-800 mb-1">QR Attendance System</h1>
+    <p class="text-sm text-slate-500 mb-4">Cutoff: 7:30 AM | Cooldown: 10 mins</p>
 
-<script>
-  // IYONG APPS SCRIPT WEB APP URL:
-  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzUZUxSxBJedETA102JkNr40wrWeXpGEriuEif-T2LllbDtG3y6uyS8Cayd-jQcOB-5kA/exec";
+    <!-- Camera Scanner Viewport -->
+    <div id="reader" class="w-full rounded-xl overflow-hidden border-2 border-dashed border-slate-300"></div>
 
-  let isScanning = true;
+    <!-- Status Banner / Notification Display -->
+    <div id="status-card" class="w-full mt-5 p-4 rounded-xl text-center hidden">
+      <h2 id="status-title" class="font-bold text-lg"></h2>
+      <p id="status-msg" class="text-sm mt-1"></p>
+    </div>
+  </div>
 
-  // Sound feedback
-  function playBeep(success = true) {
-    try {
-      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
+  <script>
+    // PALITAN ITO NG IYONG DEPLOYED APPS SCRIPT WEB APP URL:
+    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzUZUxSxBJedETA102JkNr40wrWeXpGEriuEif-T2LllbDtG3y6uyS8Cayd-jQcOB-5kA/exec";
 
-      osc.type = "sine";
-      osc.frequency.value = success ? 880 : 320;
-      gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+    let isProcessing = false;
+    let lastScannedCode = "";
+    let lastScanTime = 0;
 
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
+    function showStatus(title, message, type) {
+      const card = document.getElementById("status-card");
+      const titleElem = document.getElementById("status-title");
+      const msgElem = document.getElementById("status-msg");
 
-      osc.start();
-      osc.stop(audioCtx.currentTime + 0.15);
-    } catch (e) {
-      console.log("Audio feedback error:", e);
+      card.className = "w-full mt-5 p-4 rounded-xl text-center border ";
+      if (type === "success") {
+        card.classList.add("bg-emerald-50", "text-emerald-800", "border-emerald-300");
+      } else if (type === "warning") {
+        card.classList.add("bg-amber-50", "text-amber-800", "border-amber-300");
+      } else {
+        card.classList.add("bg-rose-50", "text-rose-800", "border-rose-300");
+      }
+
+      titleElem.innerText = title;
+      msgElem.innerText = message;
+      card.classList.remove("hidden");
     }
-  }
 
-  function onScanSuccess(decodedText) {
-    if (!isScanning) return;
-    isScanning = false;
-
-    const statusDiv = document.getElementById("status");
-    statusDiv.className = "";
-    statusDiv.innerText = `Checking ID: ${decodedText}...`;
-
-    fetch(SCRIPT_URL, {
-      method: "POST",
-      redirect: "follow",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ studentId: decodedText.trim() })
-    })
-    .then(res => res.json())
-    .then(data => {
-      if (data.status === "success") {
-        playBeep(true);
-        statusDiv.className = "success";
-        statusDiv.innerHTML = `✓ <strong>${data.action}</strong>: ${data.name}<br>
-          <div class="subtext">Grade ${data.grade} - ${data.section} | ${data.time}</div>`;
-      } else if (data.status === "cooldown") {
-        playBeep(false);
-        statusDiv.className = "warning";
-        statusDiv.innerHTML = `⚠️ <strong>${data.name}</strong><br>
-          <div class="subtext">${data.message}</div>`;
-      } else if (data.status === "complete") {
-        playBeep(false);
-        statusDiv.className = "info";
-        statusDiv.innerHTML = `ℹ️ <strong>${data.name}</strong><br>
-          <div class="subtext">${data.message}</div>`;
-      } else {
-        playBeep(false);
-        statusDiv.className = "error";
-        statusDiv.innerText = `❌ ${data.message}`;
+    async function handleScanSuccess(decodedText) {
+      const now = Date.now();
+      // Iwasan ang paulit-ulit na pagbasa ng parehong QR sa loob ng 5 segundo habang nakatutok
+      if (decodedText === lastScannedCode && (now - lastScanTime) < 5000) {
+        return;
       }
 
-      // 4-second frontend cooldown para hindi magka-duplicate read bago maging handa ang scanner
-      setTimeout(() => {
-        statusDiv.className = "";
-        statusDiv.innerText = "Ready to scan QR Code...";
-        isScanning = true;
-      }, 4000);
-    })
-    .catch(err => {
-      console.error("Fetch Error:", err);
-      playBeep(false);
-      statusDiv.className = "error";
-      statusDiv.innerText = "❌ Network error o hindi makakonekta.";
-      setTimeout(() => {
-        statusDiv.className = "";
-        statusDiv.innerText = "Ready to scan QR Code...";
-        isScanning = true;
-      }, 4000);
-    });
-  }
+      if (isProcessing) return;
+      isProcessing = true;
+      lastScannedCode = decodedText;
+      lastScanTime = now;
 
-  // Camera setup
-  const html5QrCode = new Html5Qrcode("reader");
+      showStatus("Processing...", "Recording attendance for LRN: " + decodedText, "warning");
 
-  html5QrCode.start(
-    { facingMode: "environment" },
-    {
-      fps: 15,
-      qrbox: { width: 250, height: 250 },
-      aspectRatio: 1.0
-    },
-    onScanSuccess,
-    () => {}
-  ).then(() => {
-    document.getElementById("status").innerText = "Ready to scan QR Code...";
-  }).catch(err => {
-    console.error("Camera Init Error:", err);
-    Html5Qrcode.getCameras().then(devices => {
-      if (devices && devices.length) {
-        html5QrCode.start(
-          devices[0].id,
-          { fps: 15, qrbox: { width: 250, height: 250 } },
-          onScanSuccess,
-          () => {}
-        ).then(() => {
-          document.getElementById("status").innerText = "Ready to scan QR Code...";
+      try {
+        const response = await fetch(WEB_APP_URL, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify({ lrn: decodedText.trim() })
         });
-      } else {
-        document.getElementById("status").innerText = "Walang nahanap na camera sa device.";
-      }
-    }).catch(e => {
-      document.getElementById("status").innerText = "Camera access denied o kailangan ng permission.";
-    });
-  });
-</script>
 
+        const result = await response.json();
+
+        if (result.status === "success") {
+          showStatus(
+            result.action === "TIME_IN" ? "✅ TIME IN" : "🚪 TIME OUT",
+            result.message,
+            "success"
+          );
+        } else if (result.status === "warning") {
+          showStatus("⚠️ Paalala", result.message, "warning");
+        } else {
+          showStatus("❌ Error", result.message, "error");
+        }
+      } catch (err) {
+        showStatus("Connection Error", "Hindi makakonekta sa Google Sheets. Pakisuri ang network.", "error");
+      } finally {
+        isProcessing = false;
+      }
+    }
+
+    // Simulan ang scanner
+    const html5QrcodeScanner = new Html5QrcodeScanner(
+      "reader", 
+      { fps: 10, qrbox: { width: 250, height: 250 } },
+      /* verbose= */ false
+    );
+    html5QrcodeScanner.render(handleScanSuccess);
+  </script>
 </body>
 </html>
