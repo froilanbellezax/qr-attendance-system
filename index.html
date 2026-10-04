@@ -13,7 +13,7 @@
 
   <div class="max-w-md w-full bg-white rounded-2xl shadow-xl p-6 flex flex-col items-center border border-slate-200">
     <h1 class="text-2xl font-bold text-slate-800 mb-1">QR Attendance System</h1>
-    <p class="text-xs font-medium text-slate-500 mb-4 uppercase tracking-wider">Cutoff: 7:30 AM | Time out: 5:00 PM</p>
+    <p class="text-xs font-medium text-slate-500 mb-4 uppercase tracking-wider">Cutoff: 7:30 AM | Cooldown: 30 mins</p>
 
     <!-- Camera Viewport Container -->
     <div id="reader" class="w-full bg-black rounded-xl overflow-hidden min-h-[300px] border border-slate-300"></div>
@@ -30,10 +30,50 @@
     const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzUZUxSxBJedETA102JkNr40wrWeXpGEriuEif-T2LllbDtG3y6uyS8Cayd-jQcOB-5kA/exec";
 
     // Global cooldown between scans (7 seconds)
-    const GLOBAL_COOLDOWN_MS = 8000;
+    const GLOBAL_COOLDOWN_MS = 7000;
     let lastScanTimestamp = 0;
     let isProcessing = false;
     let countdownTimer = null;
+
+    // --- SOUND EFFECTS (Web Audio API Synthesizer) ---
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    function playSound(type) {
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+
+      if (type === "success") {
+        // High double-beep for Success / Time In / Time Out
+        playTone(600, 0.1, () => {
+          setTimeout(() => playTone(800, 0.15), 50);
+        });
+      } else {
+        // Low single buzz for Warning / Error
+        playTone(200, 0.35, null, "sawtooth");
+      }
+    }
+
+    function playTone(freq, duration, callback, waveType = "sine") {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+
+      osc.type = waveType;
+      osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+
+      gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      osc.start();
+      osc.stop(audioCtx.currentTime + duration);
+
+      if (callback) {
+        setTimeout(callback, duration * 1000);
+      }
+    }
 
     function showStatus(title, message, type) {
       const card = document.getElementById("status-card");
@@ -57,10 +97,10 @@
     async function handleScanSuccess(decodedText) {
       const now = Date.now();
 
-      // 1. Check if the universal scanner cooldown is still active
+      // Check if universal cooldown is active
       const elapsed = now - lastScanTimestamp;
       if (elapsed < GLOBAL_COOLDOWN_MS) {
-        return; // Ignore any scan during this window
+        return;
       }
 
       if (isProcessing) return;
@@ -84,6 +124,7 @@
         let baseMessage = "";
 
         if (result.status === "success") {
+          playSound("success");
           baseMessage = result.message;
           showStatus(
             result.action === "TIME_IN" ? "✅ TIME IN" : "🚪 TIME OUT",
@@ -91,14 +132,16 @@
             "success"
           );
         } else if (result.status === "warning") {
+          playSound("error");
           baseMessage = result.message;
           showStatus("⚠️ Notice", baseMessage, "warning");
         } else {
+          playSound("error");
           baseMessage = result.message;
           showStatus("❌ Error", baseMessage, "error");
         }
 
-        // 2. Start the on-screen countdown timer for the next student
+        // Countdown timer para sa susunod na scan
         let remainingSeconds = Math.ceil(GLOBAL_COOLDOWN_MS / 1000);
         const msgElem = document.getElementById("status-msg");
 
@@ -113,6 +156,7 @@
         }, 1000);
 
       } catch (err) {
+        playSound("error");
         showStatus("Connection Error", "Unable to communicate with the database. Please check your internet connection.", "error");
       } finally {
         isProcessing = false;
@@ -121,7 +165,7 @@
 
     const html5QrCode = new Html5Qrcode("reader");
 
-    // Initialize camera by selecting the rear/back lens
+    // Buksan ang back camera
     Html5Qrcode.getCameras().then(devices => {
       if (devices && devices.length) {
         let selectedCamera = devices.find(device => 
