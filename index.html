@@ -13,7 +13,7 @@
 
   <div class="max-w-md w-full bg-white rounded-2xl shadow-xl p-6 flex flex-col items-center border border-slate-200">
     <h1 class="text-2xl font-bold text-slate-800 mb-1">QR Attendance System</h1>
-    <p class="text-xs font-medium text-slate-500 mb-4 uppercase tracking-wider">Cutoff: 7:30 AM | TimeOut: 5:00 PM </p>
+    <p class="text-xs font-medium text-slate-500 mb-4 uppercase tracking-wider">Cutoff: 7:30 AM | Cooldown: 30 mins</p>
 
     <!-- Camera Viewport Container -->
     <div id="reader" class="w-full bg-black rounded-xl overflow-hidden min-h-[300px] border border-slate-300"></div>
@@ -21,16 +21,19 @@
     <!-- Status Alert Display -->
     <div id="status-card" class="w-full mt-5 p-4 rounded-xl text-center hidden transition-all duration-200">
       <h2 id="status-title" class="font-bold text-base"></h2>
-      <p id="status-msg" class="text-sm mt-1"></p>
+      <p id="status-msg" class="text-sm mt-1 whitespace-pre-line"></p>
     </div>
   </div>
 
   <script>
+    // YOUR GOOGLE APPS SCRIPT WEB APP URL:
     const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzUZUxSxBJedETA102JkNr40wrWeXpGEriuEif-T2LllbDtG3y6uyS8Cayd-jQcOB-5kA/exec";
 
+    // Global cooldown between scans (7 seconds)
+    const GLOBAL_COOLDOWN_MS = 6000;
+    let lastScanTimestamp = 0;
     let isProcessing = false;
-    let lastScannedCode = "";
-    let lastScanTime = 0;
+    let countdownTimer = null;
 
     function showStatus(title, message, type) {
       const card = document.getElementById("status-card");
@@ -53,15 +56,20 @@
 
     async function handleScanSuccess(decodedText) {
       const now = Date.now();
-      // Ignore repeat scans of the same QR code within 5 seconds
-      if (decodedText === lastScannedCode && (now - lastScanTime) < 5000) {
-        return;
+
+      // 1. Check if the universal scanner cooldown is still active
+      const elapsed = now - lastScanTimestamp;
+      if (elapsed < GLOBAL_COOLDOWN_MS) {
+        return; // Ignore any scan during this window
       }
 
       if (isProcessing) return;
       isProcessing = true;
-      lastScannedCode = decodedText;
-      lastScanTime = now;
+      lastScanTimestamp = now;
+
+      if (countdownTimer) {
+        clearInterval(countdownTimer);
+      }
 
       showStatus("Processing...", "Recording attendance for LRN: " + decodedText, "warning");
 
@@ -73,20 +81,39 @@
         });
 
         const result = await response.json();
+        let baseMessage = "";
 
         if (result.status === "success") {
+          baseMessage = result.message;
           showStatus(
             result.action === "TIME_IN" ? "✅ TIME IN" : "🚪 TIME OUT",
-            result.message,
+            baseMessage,
             "success"
           );
         } else if (result.status === "warning") {
-          showStatus("⚠️ Notice", result.message, "warning");
+          baseMessage = result.message;
+          showStatus("⚠️ Notice", baseMessage, "warning");
         } else {
-          showStatus("❌ Error", result.message, "error");
+          baseMessage = result.message;
+          showStatus("❌ Error", baseMessage, "error");
         }
+
+        // 2. Start the on-screen countdown timer for the next student
+        let remainingSeconds = Math.ceil(GLOBAL_COOLDOWN_MS / 1000);
+        const msgElem = document.getElementById("status-msg");
+
+        countdownTimer = setInterval(() => {
+          remainingSeconds--;
+          if (remainingSeconds > 0) {
+            msgElem.innerText = `${baseMessage}\n\nNext scan available in ${remainingSeconds}s...`;
+          } else {
+            msgElem.innerText = `${baseMessage}\n\nScanner ready for next student.`;
+            clearInterval(countdownTimer);
+          }
+        }, 1000);
+
       } catch (err) {
-        showStatus("Connection Error", "Unable to communicate with the database. Check your internet connection.", "error");
+        showStatus("Connection Error", "Unable to communicate with the database. Please check your internet connection.", "error");
       } finally {
         isProcessing = false;
       }
@@ -94,17 +121,15 @@
 
     const html5QrCode = new Html5Qrcode("reader");
 
-    // Initialize camera by detecting available video devices
+    // Initialize camera by selecting the rear/back lens
     Html5Qrcode.getCameras().then(devices => {
       if (devices && devices.length) {
-        // Prioritize back/rear camera by checking device label
         let selectedCamera = devices.find(device => 
           device.label.toLowerCase().includes("back") || 
           device.label.toLowerCase().includes("rear") ||
           device.label.toLowerCase().includes("environment")
         );
 
-        // Fallback to the last camera in the list (typically the back camera on Android/iOS)
         let cameraId = selectedCamera ? selectedCamera.id : devices[devices.length - 1].id;
 
         html5QrCode.start(
@@ -121,7 +146,7 @@
         showStatus("No Camera Found", "No camera hardware detected on this device.", "error");
       }
     }).catch(err => {
-      showStatus("Permission Error", "Unable to query cameras. Please ensure camera access is allowed.", "error");
+      showStatus("Permission Error", "Unable to access camera. Please ensure permissions are granted.", "error");
     });
   </script>
 </body>
