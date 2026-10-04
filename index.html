@@ -8,6 +8,16 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- HTML5 QR Code Library -->
   <script src="https://unpkg.com/html5-qrcode"></script>
+  <style>
+    @keyframes scanPulse {
+      0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
+      70% { box-shadow: 0 0 0 12px rgba(59, 130, 246, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+    }
+    .detect-ring {
+      animation: scanPulse 0.8s ease-out;
+    }
+  </style>
 </head>
 <body class="bg-slate-100 min-h-screen flex flex-col items-center justify-center p-4">
 
@@ -16,7 +26,9 @@
     <p class="text-xs font-medium text-slate-500 mb-4 uppercase tracking-wider">Cutoff: 7:30 AM | Cooldown: 30 mins</p>
 
     <!-- Camera Viewport Container -->
-    <div id="reader" class="w-full bg-black rounded-xl overflow-hidden min-h-[300px] border border-slate-300"></div>
+    <div id="reader-wrapper" class="w-full rounded-xl overflow-hidden transition-all duration-300 border-2 border-slate-300">
+      <div id="reader" class="w-full bg-black min-h-[300px]"></div>
+    </div>
 
     <!-- Status Alert Display -->
     <div id="status-card" class="w-full mt-5 p-4 rounded-xl text-center hidden transition-all duration-200">
@@ -26,52 +38,56 @@
   </div>
 
   <script>
-    // YOUR GOOGLE APPS SCRIPT WEB APP URL:
     const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzUZUxSxBJedETA102JkNr40wrWeXpGEriuEif-T2LllbDtG3y6uyS8Cayd-jQcOB-5kA/exec";
 
-    // Global cooldown between scans (7 seconds)
     const GLOBAL_COOLDOWN_MS = 7000;
     let lastScanTimestamp = 0;
     let isProcessing = false;
     let countdownTimer = null;
 
-    // --- SOUND EFFECTS (Web Audio API Synthesizer) ---
+    // --- AUDIO SYNTHESIZER ---
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-    function playSound(type) {
-      if (audioCtx.state === 'suspended') {
-        audioCtx.resume();
-      }
+    function playTone(freq, duration, callback, waveType = "sine") {
+      try {
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
 
-      if (type === "success") {
-        // High double-beep for Success / Time In / Time Out
-        playTone(600, 0.1, () => {
-          setTimeout(() => playTone(800, 0.15), 50);
-        });
-      } else {
-        // Low single buzz for Warning / Error
-        playTone(200, 0.35, null, "sawtooth");
+        osc.type = waveType;
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+
+        gain.gain.setValueAtTime(0.18, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+
+        if (callback) {
+          setTimeout(callback, duration * 1000);
+        }
+      } catch (e) {
+        console.warn("Audio playback not allowed yet:", e);
       }
     }
 
-    function playTone(freq, duration, callback, waveType = "sine") {
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-
-      osc.type = waveType;
-      osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-
-      gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
-
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-
-      osc.start();
-      osc.stop(audioCtx.currentTime + duration);
-
-      if (callback) {
-        setTimeout(callback, duration * 1000);
+    function playSound(type) {
+      if (type === "detect") {
+        // Quick high blip when QR is detected by camera
+        playTone(1200, 0.06);
+      } else if (type === "success") {
+        // High melodic chime for verified Time In / Time Out
+        playTone(600, 0.1, () => {
+          setTimeout(() => playTone(850, 0.16), 50);
+        });
+      } else {
+        // Low buzzer for Warning or Error
+        playTone(220, 0.35, null, "sawtooth");
       }
     }
 
@@ -97,7 +113,7 @@
     async function handleScanSuccess(decodedText) {
       const now = Date.now();
 
-      // Check if universal cooldown is active
+      // Check if scanner cooldown is active
       const elapsed = now - lastScanTimestamp;
       if (elapsed < GLOBAL_COOLDOWN_MS) {
         return;
@@ -107,11 +123,20 @@
       isProcessing = true;
       lastScanTimestamp = now;
 
+      // 1. Instant feedback: Sound + Visual border flash
+      playSound("detect");
+      const wrapper = document.getElementById("reader-wrapper");
+      wrapper.classList.add("detect-ring", "border-blue-500");
+      setTimeout(() => {
+        wrapper.classList.remove("detect-ring", "border-blue-500");
+      }, 800);
+
       if (countdownTimer) {
         clearInterval(countdownTimer);
       }
 
-      showStatus("Processing...", "Recording attendance for LRN: " + decodedText, "warning");
+      // Show immediate detection state
+      showStatus("QR Code Detected!", `Scanned LRN: ${decodedText.trim()}\nValidating with database...`, "warning");
 
       try {
         const response = await fetch(WEB_APP_URL, {
@@ -127,7 +152,7 @@
           playSound("success");
           baseMessage = result.message;
           showStatus(
-            result.action === "TIME_IN" ? "✅ TIME IN" : "🚪 TIME OUT",
+            result.action === "TIME_IN" ? "✅ TIME IN SUCCESS" : "🚪 TIME OUT SUCCESS",
             baseMessage,
             "success"
           );
@@ -141,7 +166,7 @@
           showStatus("❌ Error", baseMessage, "error");
         }
 
-        // Countdown timer para sa susunod na scan
+        // On-screen cooldown countdown
         let remainingSeconds = Math.ceil(GLOBAL_COOLDOWN_MS / 1000);
         const msgElem = document.getElementById("status-msg");
 
@@ -150,7 +175,7 @@
           if (remainingSeconds > 0) {
             msgElem.innerText = `${baseMessage}\n\nNext scan available in ${remainingSeconds}s...`;
           } else {
-            msgElem.innerText = `${baseMessage}\n\nScanner ready for next student.`;
+            msgElem.innerText = `${baseMessage}\n\nReady for next student.`;
             clearInterval(countdownTimer);
           }
         }, 1000);
@@ -165,7 +190,6 @@
 
     const html5QrCode = new Html5Qrcode("reader");
 
-    // Buksan ang back camera
     Html5Qrcode.getCameras().then(devices => {
       if (devices && devices.length) {
         let selectedCamera = devices.find(device => 
